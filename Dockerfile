@@ -1,10 +1,9 @@
 # ========================================================
 # ETAPA 1: Compilación (Builder)
-# Optimizamos para que Electron Forge no bloquee el proceso
 # ========================================================
 FROM node:24-slim AS builder
 
-# Instalamos dependencias de sistema necesarias para Node-Gyp y Dyad
+# Instalamos herramientas mínimas necesarias
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -12,38 +11,32 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Preparamos pnpm (el motor de Dyad)
+# Preparamos pnpm y configuramos el linker para evitar errores de Electron
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
-
-# CONFIGURACIÓN DE SEGURIDAD PARA PNPM
-# Forzamos el modo 'hoisted' para que los módulos sean planos
 ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
 
-# Instalación de paquetes (Capa cacheada si no cambia package.json)
+# Instalación de dependencias
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --no-frozen-lockfile
 
-# Copiamos el código fuente completo
+# Copiamos el código y ejecutamos el build
 COPY . .
 
-# EJECUCIÓN DEL BUILD 
-# Intentamos compilar la web. Si falla por errores de código (@/alias), 
-# el '|| true' permite que el Docker continúe para darnos diagnóstico.
+# Intentamos el build de Vite. 
+# Si falla, el contenedor seguirá vivo para que podamos auditar los archivos.
 RUN npx vite build --emptyOutDir false || pnpm run build || true
 
-# RECOLECCIÓN DE ARCHIVOS (Auditoría de rutas)
-# Dyad puede generar archivos en .vite, dist o out. Los unificamos.
+# Recolección inteligente de archivos compilados
 RUN mkdir -p /app/dist_final && \
     (cp -r .vite/renderer/main_window/* /app/dist_final/ 2>/dev/null || \
      cp -r dist/* /app/dist_final/ 2>/dev/null || \
      cp -r out/* /app/dist_final/ 2>/dev/null || true)
 
-# SEGURO ANTI-502: Si no hay index.html, creamos uno de emergencia.
-# Esto mantiene el contenedor encendido y nos permite ver logs.
+# Seguro anti-vaciado: Si Vite no generó nada, creamos el aviso de error.
 RUN if [ ! -f /app/dist_final/index.html ]; then \
-    echo "<h1>Dyad: Error de Compilación</h1><p>Vite no pudo generar los archivos por errores de rutas internas (@/atoms). El servidor está vivo, pero el código necesita ajustes.</p>" > /app/dist_final/index.html; \
+    echo "<h1>Dyad: Error de Compilación</h1><p>Vite no generó archivos. Revisa los alias @/ en vite.config.ts.</p>" > /app/dist_final/index.html; \
     fi
 
 # ========================================================
@@ -52,20 +45,15 @@ RUN if [ ! -f /app/dist_final/index.html ]; then \
 FROM node:24-slim
 WORKDIR /app
 
-# Instalamos el servidor estático 'serve'
+# Instalamos el servidor estático
 RUN npm install -g serve
 
-# Copiamos los archivos finales del Builder
+# Copiamos los archivos generados
 COPY --from=builder /app/dist_final ./public
 
-# Aseguramos compatibilidad de ejecución
-RUN ln -s /usr/local/bin/node /usr/bin/node || true
+# EXPOSE 4000: Cambiamos al 4000 porque Dokploy ya usa el 3000
+EXPOSE 4000
 
-# Puerto que Dokploy debe mapear
-EXPOSE 3000
-
-# ARRANQUE DEFINITIVO
-# -s: Modo SPA (Single Page Application)
-# -l 3000: Puerto de escucha
-# -a 0.0.0.0: Escucha externa (Crucial para que el 502 desaparezca)
-CMD ["serve", "-s", "public", "-l", "3000", "-a", "0.0.0.0"]
+# Comando de arranque con diagnóstico integrado
+# Esto imprimirá en los logs de Dokploy qué está pasando exactamente.
+CMD ["sh", "-c", "echo '--- AUDITORIA DE ARRANQUE ---' && ls -la ./public && echo '--- INICIANDO SERVIDOR EN PUERTO 4000 ---' && serve -s public -l 4000 -a 0.0.0.0"]
