@@ -1,7 +1,7 @@
-# Usamos Node 24
+# Usamos Node 24 slim para un contenedor ligero pero potente
 FROM node:24-slim
 
-# Instalamos herramientas mínimas
+# Instalamos dependencias de compilación necesarias para paquetes nativos
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -9,32 +9,46 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Preparamos pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# --- PASO CRUCIAL: Configuración antes de nada ---
-# Forzamos el modo hoisted para evitar el fallo de Electron Forge
+# --- CONFIGURACIÓN DE ESTRUCTURA ---
+# Forzamos el modo 'hoisted' para que Electron Forge no falle
 ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
-ENV NPM_CONFIG_LOGLEVEL=error
+# Reducimos el ruido de logs pero mantenemos errores críticos
+ENV NPM_CONFIG_LOGLEVEL=warn 
 
-COPY package.json ./
-
-# Instalamos permitiendo que pnpm genere su propia estructura
+# Copiamos solo lo necesario para instalar dependencias (aprovecha la caché de Docker)
+COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --no-frozen-lockfile
 
+# Copiamos el resto del código del proyecto
 COPY . .
 
-# El build ahora debería pasar el check de package manager
+# Re-aseguramos el archivo .npmrc por si el COPY lo sobrescribió
+RUN echo "node-linker=hoisted" > .npmrc
+
+# Ejecutamos el build. '|| true' es vital porque el empaquetado de .deb/.rpm 
+# fallará en Docker, pero la web se genera justo antes.
 RUN pnpm run build || true
 
-# Enlace para Node.js
+# Enlace simbólico para que los scripts internos encuentren Node.js
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
-# Instalamos el servidor estático
+# Instalamos 'serve', el estándar de la industria para apps estáticas
 RUN npm install -g serve
 
 EXPOSE 3000
 
-# Comando de arranque inteligente
-CMD ["sh", "-c", "if [ -d \".vite/renderer/main_window\" ]; then serve -s .vite/renderer/main_window -l 3000; else serve -s dist -l 3000; fi"]
+# --- COMANDO DE ARRANQUE INTELIGENTE (Solución al 404) ---
+# Este comando busca dónde quedó el index.html y sirve esa carpeta.
+CMD ["sh", "-c", "TARGET_DIR=$(find . -name index.html -not -path '*/node_modules/*' | head -n 1 | xargs dirname); \
+    if [ -n \"$TARGET_DIR\" ]; then \
+        echo \"🚀 Dyad detectado en: $TARGET_DIR\"; \
+        serve -s \"$TARGET_DIR\" -l 3000 -a 0.0.0.0; \
+    else \
+        echo \"❌ ERROR: No se encontró index.html para servir\"; \
+        exit 1; \
+    fi"]
