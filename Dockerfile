@@ -12,22 +12,23 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# --- FIX PARA EL ERROR DE NODE-LINKER ---
-# Esto crea el archivo que Electron Forge necesita ver sí o sí
+# --- PASO CRUCIAL: Configuración antes de nada ---
+# Definimos el linker como variable y como archivo físico ANTES del install
+ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
-
-# Silenciamos los logs de npm para que no den warnings
 ENV NPM_CONFIG_LOGLEVEL=error
 
 COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install
+
+# Forzamos la instalación limpia con el nuevo linker
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-# Ejecutamos el build (ahora sí pasará el check del package manager)
+# Ahora el build pasará el check porque node_modules ya está 'hoisted'
 RUN pnpm run build || true
 
-# Enlace para Node.js (necesario para la app)
+# Enlace para Node.js
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
 # Instalamos el servidor estático
