@@ -1,4 +1,5 @@
-FROM node:20-slim
+# Cambiado a Node 24 para cumplir con los requisitos de Dyad
+FROM node:24-slim
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
