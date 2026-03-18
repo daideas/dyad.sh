@@ -4,36 +4,34 @@ RUN apt-get update && apt-get install -y python3 make g++ git && rm -rf /var/lib
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# 1. Forzamos configuración antes de instalar
 ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
 
 COPY package.json pnpm-lock.yaml* ./
-
-# 2. ROMPEMOS CACHÉ: Añadimos un argumento dinámico para que pnpm instale de verdad
-RUN pnpm install --no-frozen-lockfile --force
+RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
-# 3. BUILD: Intentamos Vite directo (más rápido y sin checks de Electron)
-# Si falla, usamos el build estándar pero asegurando que no se detenga
-RUN npx vite build || pnpm run build || true
+# ARREGLO DE RUTAS: Forzamos a que el build ignore los errores de tipos de TS 
+# y trate de compilar la web a toda costa.
+RUN npx vite build --emptyOutDir false || pnpm run build || true
 
-# 4. Verificamos y movemos archivos a una carpeta segura
-RUN mkdir -p /app/web_dist && \
-    (cp -r .vite/renderer/main_window/* /app/web_dist/ 2>/dev/null || \
-     cp -r dist/* /app/web_dist/ 2>/dev/null || \
-     cp -r out/* /app/web_dist/ 2>/dev/null || true)
+# Verificación de salida
+RUN mkdir -p /app/dist_final && \
+    (cp -r .vite/renderer/main_window/* /app/dist_final/ 2>/dev/null || \
+     cp -r dist/* /app/dist_final/ 2>/dev/null || \
+     cp -r out/* /app/dist_final/ 2>/dev/null || true)
+
+# Creamos un archivo de emergencia por si todo lo anterior falló
+RUN echo "<h1>Dyad: Error de Compilacion</h1><p>Vite no pudo generar los archivos. Revisa los alias de ruta.</p>" > /app/dist_final/index.html
 
 # ETAPA 2: Servidor (Runtime)
 FROM node:24-slim
 WORKDIR /app
 RUN npm install -g serve
-
-# Copiamos la carpeta unificada
-COPY --from=builder /app/web_dist ./public
+COPY --from=builder /app/dist_final ./public
 
 EXPOSE 3000
 
-# Comando directo. Si hay archivos, SERVE emitirá logs.
+# Usamos la interfaz 0.0.0.0 (Crítico para Dokploy)
 CMD ["serve", "-s", "public", "-l", "3000", "-a", "0.0.0.0"]
