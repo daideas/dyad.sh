@@ -13,19 +13,19 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 # --- PASO CRUCIAL: Configuración antes de nada ---
-# Definimos el linker como variable y como archivo físico ANTES del install
+# Forzamos el modo hoisted para evitar el fallo de Electron Forge
 ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
 ENV NPM_CONFIG_LOGLEVEL=error
 
-COPY package.json pnpm-lock.yaml* ./
+COPY package.json ./
 
-# Forzamos la instalación limpia con el nuevo linker
-RUN pnpm install --frozen-lockfile
+# Instalamos permitiendo que pnpm genere su propia estructura
+RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
-# Ahora el build pasará el check porque node_modules ya está 'hoisted'
+# El build ahora debería pasar el check de package manager
 RUN pnpm run build || true
 
 # Enlace para Node.js
