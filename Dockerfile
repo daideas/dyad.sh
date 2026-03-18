@@ -3,7 +3,7 @@
 # ========================================================
 FROM node:24-slim AS builder
 
-# Instalamos herramientas mínimas necesarias
+# 1. Instalamos herramientas de compilación necesarias
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -11,32 +11,33 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Preparamos pnpm y configuramos el linker para evitar errores de Electron
+# 2. Configuramos pnpm (Modo 'hoisted' para evitar conflictos con Electron)
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
 
-# Instalación de dependencias
+# 3. Instalación de dependencias (Cacheada para mayor velocidad)
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --no-frozen-lockfile
 
-# Copiamos el código y ejecutamos el build
+# 4. Copiamos el código fuente
 COPY . .
 
-# Intentamos el build de Vite. 
-# Si falla, el contenedor seguirá vivo para que podamos auditar los archivos.
+# 5. Ejecutamos el Build de Vite
+# Mantenemos el || true solo para que el contenedor no muera en el build 
+# y podamos ver el error real después en los logs de arranque.
 RUN npx vite build --emptyOutDir false || pnpm run build || true
 
-# Recolección inteligente de archivos compilados
+# 6. Recolección de archivos (Unificamos posibles rutas de salida)
 RUN mkdir -p /app/dist_final && \
     (cp -r .vite/renderer/main_window/* /app/dist_final/ 2>/dev/null || \
      cp -r dist/* /app/dist_final/ 2>/dev/null || \
      cp -r out/* /app/dist_final/ 2>/dev/null || true)
 
-# Seguro anti-vaciado: Si Vite no generó nada, creamos el aviso de error.
+# 7. SEGURO ANTI-502: Si la carpeta está vacía, creamos un index de emergencia
 RUN if [ ! -f /app/dist_final/index.html ]; then \
-    echo "<h1>Dyad: Error de Compilación</h1><p>Vite no generó archivos. Revisa los alias @/ en vite.config.ts.</p>" > /app/dist_final/index.html; \
+    echo "<h1>Dyad: Error de Compilación</h1><p>Vite falló. Revisa los alias @/ en vite.config.ts y los logs de Dokploy.</p>" > /app/dist_final/index.html; \
     fi
 
 # ========================================================
@@ -45,15 +46,14 @@ RUN if [ ! -f /app/dist_final/index.html ]; then \
 FROM node:24-slim
 WORKDIR /app
 
-# Instalamos el servidor estático
+# Instalamos el servidor estático globalmente
 RUN npm install -g serve
 
-# Copiamos los archivos generados
+# Copiamos solo lo necesario de la etapa anterior
 COPY --from=builder /app/dist_final ./public
 
-# EXPOSE 4000: Cambiamos al 4000 porque Dokploy ya usa el 3000
+# IMPORTANTE: Cambiamos al puerto 4000 para no chocar con Dokploy
 EXPOSE 4000
 
-# Comando de arranque con diagnóstico integrado
-# Esto imprimirá en los logs de Dokploy qué está pasando exactamente.
-CMD ["sh", "-c", "echo '--- AUDITORIA DE ARRANQUE ---' && ls -la ./public && echo '--- INICIANDO SERVIDOR EN PUERTO 4000 ---' && serve -s public -l 4000 -a 0.0.0.0"]
+# Diagnóstico en tiempo real al arrancar el contenedor
+CMD ["sh", "-c", "echo '--- VERIFICANDO ARCHIVOS ---' && ls -la ./public && echo '--- ARRANCANDO SERVIDOR EN PUERTO 4000 ---' && serve -s public -l 4000 -a 0.0.0.0"]
