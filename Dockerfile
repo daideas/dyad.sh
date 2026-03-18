@@ -12,12 +12,11 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# --- SOLUCIÓN AL ERROR DE NODE-LINKER ---
-# Creamos el archivo .npmrc físicamente para que Electron Forge lo detecte
+# --- FIX PARA EL ERROR DE NODE-LINKER ---
+# Esto crea el archivo que Electron Forge necesita ver sí o sí
 RUN echo "node-linker=hoisted" > .npmrc
 
-# Variables para limpiar logs
-ENV PNPM_NODE_LINKER=hoisted
+# Silenciamos los logs de npm para que no den warnings
 ENV NPM_CONFIG_LOGLEVEL=error
 
 COPY package.json pnpm-lock.yaml* ./
@@ -25,10 +24,10 @@ RUN pnpm install
 
 COPY . .
 
-# Ejecutamos el build original
+# Ejecutamos el build (ahora sí pasará el check del package manager)
 RUN pnpm run build || true
 
-# Enlace para Node.js
+# Enlace para Node.js (necesario para la app)
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
 # Instalamos el servidor estático
