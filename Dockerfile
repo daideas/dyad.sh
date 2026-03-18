@@ -12,9 +12,11 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# --- CAMBIO PARA LIMPIAR WARNINGS ---
-# En lugar de 'pnpm config set', usamos una variable de entorno directa 
-# y silenciamos los logs irrelevantes de npm
+# --- SOLUCIÓN AL ERROR DE NODE-LINKER ---
+# Creamos el archivo .npmrc físicamente para que Electron Forge lo detecte
+RUN echo "node-linker=hoisted" > .npmrc
+
+# Variables para limpiar logs
 ENV PNPM_NODE_LINKER=hoisted
 ENV NPM_CONFIG_LOGLEVEL=error
 
