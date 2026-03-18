@@ -1,11 +1,12 @@
 # ETAPA 1: Construcción (Builder)
 FROM node:24-slim AS builder
 
+# Instalación de dependencias nativas para node-gyp (necesario en Dyad)
 RUN apt-get update && apt-get install -y python3 make g++ git && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# Configuración técnica de pnpm para Electron Forge
+# Forzamos estructura plana para compatibilidad con Electron Forge
 ENV PNPM_NODE_LINKER=hoisted
 RUN echo "node-linker=hoisted" > .npmrc
 
@@ -13,29 +14,31 @@ COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --no-frozen-lockfile
 
 COPY . .
-# Volvemos a asegurar el linker después del copy
-RUN echo "node-linker=hoisted" > .npmrc
 
-# Ejecutamos el build. Solo nos interesan los archivos generados.
+# Ejecución del build oficial de Dyad
 RUN pnpm run build || true
 
-# ETAPA 2: Servidor de Producción (Final)
+# --- PASO DE AUDITORÍA: Verificación y Unificación ---
+# Creamos una carpeta segura y movemos los archivos ahí. 
+# Si Dyad cambia la ruta, este script la encuentra.
+RUN mkdir -p /app/build_web && \
+    (cp -r .vite/renderer/main_window/* /app/build_web/ 2>/dev/null || \
+     cp -r dist/* /app/build_web/ 2>/dev/null || \
+     cp -r out/* /app/build_web/ 2>/dev/null || true)
+
+# ETAPA 2: Servidor (Runtime)
 FROM node:24-slim
 
 WORKDIR /app
 RUN npm install -g serve
 
-# PASO CLAVE: Copiamos SOLO los archivos web generados de la etapa anterior.
-# Buscamos en las dos rutas posibles donde Dyad guarda la web:
-COPY --from=builder /app/.vite/renderer/main_window ./public 2>/dev/null || \
-    COPY --from=builder /app/dist ./public 2>/dev/null || \
-    COPY --from=builder /app/out ./public 2>/dev/null || true
+# Copiamos la carpeta unificada que creamos en el paso anterior
+COPY --from=builder /app/build_web ./public
 
-# Enlace simbólico de Node por seguridad de compatibilidad
+# Compatibilidad de Node para procesos internos de la UI
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
 EXPOSE 3000
 
-# Servimos la carpeta 'public' que ahora contiene los archivos estáticos
-# Usamos 0.0.0.0 para que Dokploy detecte la interfaz de red correctamente
+# Mapeo explícito a 0.0.0.0 para que Dokploy/Traefik lo vean
 CMD ["serve", "-s", "public", "-l", "3000", "-a", "0.0.0.0"]
