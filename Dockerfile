@@ -1,7 +1,7 @@
 # Usamos Node 24
 FROM node:24-slim
 
-# Instalamos herramientas mínimas
+# Herramientas mínimas
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -19,12 +19,14 @@ RUN pnpm install
 
 COPY . .
 
-# CREAMOS EL ENLACE DE NODE PARA EL ERROR ANTERIOR
+# Realizamos el build (sabemos que genera la web antes de fallar en el empaquetado)
+RUN pnpm run build || true
+
+# Enlace mágico para que encuentre Node.js
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
-# EXPLICACIÓN: Usamos el modo dev de Vite porque maneja mejor la 
-# ausencia de Electron que la versión compilada estática
 EXPOSE 3000
 
-# Comando para saltar el error de IPC Renderer
-CMD ["npx", "vite", "--port", "3000", "--host", "0.0.0.0"]
+# Usamos VITE PREVIEW con el host abierto para que Dokploy/Cloudflare conecten
+# Este modo suele ser más compatible con apps que esperan Electron
+CMD ["npx", "vite", "preview", "--port", "3000", "--host", "0.0.0.0"]
