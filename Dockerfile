@@ -1,7 +1,7 @@
 # Usamos Node 24
 FROM node:24-slim
 
-# Herramientas mínimas de sistema
+# Instalamos herramientas mínimas
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# Optimizamos pnpm para Docker
 RUN pnpm config set node-linker hoisted
 
 COPY package.json pnpm-lock.yaml* ./
@@ -20,17 +19,16 @@ RUN pnpm install
 
 COPY . .
 
-# Ejecutamos el build oficial
-RUN pnpm run build || true
+# FORZAMOS EL BUILD DE VITE MANUALMENTE (Esto crea la carpeta 'dist')
+RUN npx vite build
 
-# Enlace mágico para que la app encuentre Node donde lo busca
+# Enlace para Node.js (por el error anterior)
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
-# MEJORA: Instalamos 'serve', un servidor de producción mucho más robusto
+# Instalamos el servidor
 RUN npm install -g serve
 
 EXPOSE 3000
 
-# CAMBIO DEFINITIVO: Usamos 'serve' para entregar la carpeta compilada.
-# Esto ignora los errores de "Blocked Host" y es mucho más rápido.
-CMD ["serve", "-s", ".vite/renderer/main_window", "-l", "3000", "-a", "0.0.0.0"]
+# Servimos la carpeta 'dist' que acabamos de crear con el build manual
+CMD ["serve", "-s", "dist", "-l", "3000", "-a", "0.0.0.0"]
