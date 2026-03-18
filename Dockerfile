@@ -1,10 +1,17 @@
-# Cambiado a Node 24 para cumplir con los requisitos de Dyad
-# Usamos Node 24 y configuramos pnpm para que sea compatible con Electron Forge
+# Usamos Node 24
 FROM node:24-slim
+
+# Instalamos Python y herramientas de compilación necesarias para better-sqlite3
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# Esta línea soluciona el error del node-linker
+# Configuramos pnpm para modo hoisted
 RUN pnpm config set node-linker hoisted
 
 COPY package.json pnpm-lock.yaml* ./
