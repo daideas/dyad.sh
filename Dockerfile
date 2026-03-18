@@ -19,14 +19,12 @@ RUN pnpm install
 
 COPY . .
 
-# Ejecutamos el build. Sabemos que generará la web antes de fallar en el empaquetado.
-RUN pnpm run build || true
+# CREAMOS EL ENLACE DE NODE PARA EL ERROR ANTERIOR
+RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
-# Instalamos un servidor estático ligero
-RUN npm install -g serve
-
+# EXPLICACIÓN: Usamos el modo dev de Vite porque maneja mejor la 
+# ausencia de Electron que la versión compilada estática
 EXPOSE 3000
 
-# Apuntamos a la carpeta exacta donde Vite genera el contenido en este proyecto
-# Si la ruta fuera distinta, 'serve' nos lo dirá en los logs.
-CMD ["serve", "-s", ".vite/renderer/main_window", "-l", "3000"]
+# Comando para saltar el error de IPC Renderer
+CMD ["npx", "vite", "--port", "3000", "--host", "0.0.0.0"]
