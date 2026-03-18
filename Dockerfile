@@ -19,11 +19,14 @@ RUN pnpm install
 
 COPY . .
 
-# Ejecutamos el build oficial. Ignoramos el fallo final de Electron.
+# Ejecutamos el build. Sabemos que generará la web antes de fallar en el empaquetado.
 RUN pnpm run build || true
+
+# Instalamos un servidor estático ligero
+RUN npm install -g serve
 
 EXPOSE 3000
 
-# El cambio CRUCIAL: Apuntamos a la carpeta donde Vite realmente guardó la web
-# Dyad usa electron-forge + vite, por lo que el output está en .vite/renderer/main_window
-CMD ["npx", "vite", "preview", "--outDir", ".vite/renderer/main_window", "--port", "3000", "--host", "0.0.0.0"]
+# Apuntamos a la carpeta exacta donde Vite genera el contenido en este proyecto
+# Si la ruta fuera distinta, 'serve' nos lo dirá en los logs.
+CMD ["serve", "-s", ".vite/renderer/main_window", "-l", "3000"]
