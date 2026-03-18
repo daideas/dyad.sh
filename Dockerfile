@@ -12,17 +12,21 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-RUN pnpm config set node-linker hoisted
+# --- CAMBIO PARA LIMPIAR WARNINGS ---
+# En lugar de 'pnpm config set', usamos una variable de entorno directa 
+# y silenciamos los logs irrelevantes de npm
+ENV PNPM_NODE_LINKER=hoisted
+ENV NPM_CONFIG_LOGLEVEL=error
 
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install
 
 COPY . .
 
-# Ejecutamos el build que SÍ funciona para generar la web
+# Ejecutamos el build original
 RUN pnpm run build || true
 
-# Enlace para Node.js (necesario para la app)
+# Enlace para Node.js
 RUN ln -s /usr/local/bin/node /usr/bin/node || true
 
 # Instalamos el servidor estático
@@ -30,6 +34,5 @@ RUN npm install -g serve
 
 EXPOSE 3000
 
-# TRUCO: Si la carpeta .vite no existe, la buscamos o usamos dist
-# Este comando es a prueba de fallos
+# Comando de arranque inteligente
 CMD ["sh", "-c", "if [ -d \".vite/renderer/main_window\" ]; then serve -s .vite/renderer/main_window -l 3000; else serve -s dist -l 3000; fi"]
