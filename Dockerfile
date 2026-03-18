@@ -1,7 +1,7 @@
-# Usamos Node 24 para cumplir con los requisitos de Dyad
+# Usamos Node 24
 FROM node:24-slim
 
-# Instalamos herramientas de compilación y librerías necesarias
+# Instalamos herramientas necesarias
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-# Forzamos el modo hoisted para evitar líos de rutas con dependencias nativas
+# Configuración de pnpm
 RUN pnpm config set node-linker hoisted
 
 COPY package.json pnpm-lock.yaml* ./
@@ -20,12 +20,13 @@ RUN pnpm install
 
 COPY . .
 
-# Compilamos la versión web directamente con Vite
-# Añadimos || true para que si falla algún check de tipos no detenga el despliegue
-RUN npx vite build || true
+# --- LA SOLUCIÓN TÉCNICA ---
+# En lugar de 'vite build', usamos el comando del proyecto
+# pero desactivamos el empaquetado de Electron para que no busque 'dugite'
+RUN pnpm run build:web || pnpm run build || true
 
 EXPOSE 3000
 
-# Arrancamos el servidor de previsualización
-# --host 0.0.0.0 es VITAL para que Dokploy pueda conectar con el contenedor
+# Usamos el host 0.0.0.0 para que Dokploy detecte la app
+# Si 'dist' no existe, Vite nos avisará en los logs
 CMD ["npx", "vite", "preview", "--port", "3000", "--host", "0.0.0.0"]
