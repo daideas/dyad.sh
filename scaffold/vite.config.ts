@@ -1,17 +1,17 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path' // <-- Esto es lo que resuelve el error
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // Aquí le decimos a Vite que @ significa la carpeta /src
-      "@": path.resolve(__dirname, "./src"),
+      // Esta es la línea mágica que le dice a Vite que @ es la carpeta /src
+      '@': path.resolve(__dirname, './src'),
     },
   },
   build: {
-    outDir: 'dist', // Asegura que los archivos vayan a la carpeta dist
+    outDir: 'dist',
     emptyOutDir: true,
   }
-})
+});
