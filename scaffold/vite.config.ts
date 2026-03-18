@@ -1,12 +1,21 @@
 import { defineConfig } from 'vite';
-import path from 'path'; // 1. Asegúrate de que esta línea esté arriba
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
+// https://vitejs.dev/config/
 export default defineConfig({
-  // ... aquí pueden haber otras cosas como plugins: []
+  plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'), // 2. Esta es la línea mágica
+      // Esta línea permite que Vite entienda las rutas que empiezan con @
+      '@': path.resolve(__dirname, './src'),
     },
+    // Esto asegura que en Linux (Docker) se encuentren los archivos sin problemas de extensión
+    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
   },
-  // ... resto de tu configuración
+  /* NOTA PARA EL DEPLOY: 
+     Con esta configuracion resolvemos el error de Rollup en Docker.
+     Vite ahora podra encontrar los atomos y hooks de la carpeta /src 
+     permitiendo que el build genere los archivos reales de la App. 
+  */
 });
